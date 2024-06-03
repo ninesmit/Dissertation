@@ -8,7 +8,7 @@ import kymatio.datasets as scattering_datasets
 
 class Scattering2dEffNet(nn.Module):
     '''
-        EfficientNet V2 with scattering transform as input
+        EfficientNet B7 with scattering transform as input
     '''
     def __init__(self, in_channels, classifier_type='cnn'):
         super(Scattering2dEffNet, self).__init__()
@@ -18,14 +18,16 @@ class Scattering2dEffNet(nn.Module):
 
     def build(self):
         # Load a pre-trained ResNet model
-        self.eff = models.efficientnet_v2_s(pretrained=True)
+        self.eff = models.efficientnet_b7(pretrained=True)
         
         # Modify the first convolution layer to accept the number of input channels from scattering transform
-        self.eff.features[0][0] = nn.Conv2d(self.in_channels, 24, kernel_size=3, stride=2, padding=1, bias=False)
+        self.eff.features = nn.Sequential(*list(self.eff.features[3:]))
+        self.eff.features[0][0].block[0][0] = nn.Conv2d(self.in_channels, 288, kernel_size=1, stride=1, bias=False)
         
         # Replace the fully connected layer
         num_features = self.eff.classifier[1].in_features
         self.eff.classifier = nn.Sequential(
+            nn.Dropout(p=0.5, inplace=True),
             nn.Linear(num_features, 512),
             nn.ReLU(inplace=True),
             nn.BatchNorm1d(512),
