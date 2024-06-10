@@ -151,13 +151,14 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
 
 total_start_time = time.time()
 
-num_epoch = 5
+num_epoch = 100
 
 for epoch in range(0, num_epoch):
     train(model, device, train_loader, optimizer, epoch+1, scattering)
     test(model, device, test_loader, scattering)
-    # Save the model every 10 epochs
-    if (epoch + 1) % 5 == 0:
+    
+    # Save the model every 20 epochs
+    if (epoch + 1) % 20 == 0:
         torch.save(model.state_dict(), f'Resnet_1st_and_2nd_blocks_removed_epoch_{epoch+1}.pth')
         print(f'Model saved at epoch {epoch+1}')
 
