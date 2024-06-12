@@ -98,10 +98,10 @@ def test(model, device, test_loader, scattering):
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
 
-mode = 2
+def count_trainable_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-use_cuda = torch.cuda.is_available()
-device = torch.device("cuda" if use_cuda else "cpu")
+mode = 2
 
 if mode == 1:
     scattering = Scattering2D(J=2, shape=(128, 128), max_order=1)
@@ -115,7 +115,12 @@ else:
 
 scattering = scattering.to(device)
 
+use_cuda = torch.cuda.is_available()
+device = torch.device("cuda" if use_cuda else "cpu")
 model = Scattering2dResNet(K).to(device)
+
+total_params = count_trainable_parameters(model)
+print(f"Total trainable parameters: {total_params}")
 
 # DataLoaders
 num_workers = 4
@@ -157,7 +162,7 @@ for epoch in range(0, num_epoch):
     train(model, device, train_loader, optimizer, epoch+1, scattering)
     test(model, device, test_loader, scattering)
     
-    # Save the model every 20 epochs
+    # Save the model every 10 epochs
     if (epoch + 1) % 20 == 0:
         torch.save(model.state_dict(), f'Resnet_1st_and_2nd_blocks_removed_epoch_{epoch+1}.pth')
         print(f'Model saved at epoch {epoch+1}')
