@@ -5,19 +5,29 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms, models
+from kymatio.torch import Scattering2D
+import kymatio.datasets as scattering_datasets
 
-class ResNet18(nn.Module):
+class Scattering2dResNet(nn.Module):
     '''
-        ResNet with CIFAR10
+        ResNet with scattering transform as input
     '''
-    def __init__(self, num_classes=10):
-        super(ResNet18, self).__init__()
+    def __init__(self, scattering_output_channels, num_classes=10):
+        super(Scattering2dResNet, self).__init__()
+        self.scattering_output_channels = scattering_output_channels
         self.num_classes = num_classes
         self.build()
 
     def build(self):
         # Load a pre-trained ResNet model
         self.resnet = models.resnet18(pretrained=True)
+
+        # Modify the first convolution layer to accept the number of input channels from scattering transform
+        self.resnet.conv1 = nn.Conv2d(self.scattering_output_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.resnet.maxpool = nn.MaxPool2d(kernel_size=1, stride=1, padding=0, dilation=1, ceil_mode=False)
+        
+        for param in self.resnet.conv1.parameters():
+            param.requires_grad = True
         
         # Replace the fully connected layer
         num_features = self.resnet.fc.in_features
@@ -35,15 +45,19 @@ class ResNet18(nn.Module):
         )
 
     def forward(self, x):
+        # Flatten the extra dimension
+        batch_size, channels, depth, height, width = x.size()
+        x = x.view(batch_size, channels * depth, height, width)
         return self.resnet(x)
 
-def train(model, device, train_loader, optimizer, epoch):
+def train(model, device, train_loader, optimizer, epoch, scattering):
     train_start_time = time.time()
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
+        scattering_output = scattering(data)
         optimizer.zero_grad()
-        output = model(data)
+        output = model(scattering_output)
         loss = F.cross_entropy(output, target)
         loss.backward()
         optimizer.step()
@@ -57,7 +71,7 @@ def train(model, device, train_loader, optimizer, epoch):
     
     print(f"Training time for epoch:{epoch} is {str(train_duration)}")
 
-def test(model, device, test_loader):
+def test(model, device, test_loader, scattering):
     test_start_time = time.time()
     model.eval()
     test_loss = 0
@@ -65,7 +79,7 @@ def test(model, device, test_loader):
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            output = model(data)
+            output = model(scattering(data))
             test_loss += F.cross_entropy(output, target, reduction='sum').item() # sum up batch loss
             pred = output.max(1, keepdim=True)[1] # get the index of the max log-probability
             correct += pred.eq(target.view_as(pred)).sum().item()
@@ -80,17 +94,25 @@ def test(model, device, test_loader):
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
-    
-def count_trainable_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+mode = 2
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
-model = ResNet18().to(device)
+if mode == 1:
+    scattering = Scattering2D(J=2, shape=(128, 128), max_order=1)
+    K = 17*3
+elif mode == 2:
+    scattering = Scattering2D(J=2, shape=(128, 128))
+    K = 81*3
+else:
+    scattering = Scattering2D(J=2, shape=(128, 128))
+    K = 81*3
 
-total_params = count_trainable_parameters(model)
-print(f"Total trainable parameters: {total_params}")
+scattering = scattering.to(device)
+
+model = Scattering2dResNet(K).to(device)
 
 # DataLoaders
 num_workers = 4
@@ -100,7 +122,7 @@ normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])
 
 train_loader = torch.utils.data.DataLoader(
-    datasets.CIFAR10(root='.', train=True, transform=transforms.Compose([
+    datasets.CIFAR10(root=scattering_datasets.get_dataset_dir('CIFAR'), train=True, transform=transforms.Compose([
         transforms.Resize((128, 128)),
         transforms.RandomHorizontalFlip(),
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
@@ -114,7 +136,7 @@ train_loader = torch.utils.data.DataLoader(
     batch_size=128, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
 
 test_loader = torch.utils.data.DataLoader(
-    datasets.CIFAR10(root='.', train=False, transform=transforms.Compose([
+    datasets.CIFAR10(root=scattering_datasets.get_dataset_dir('CIFAR'), train=False, transform=transforms.Compose([
         transforms.Resize((128, 128)),
         transforms.ToTensor(),
         normalize,
@@ -129,8 +151,8 @@ total_start_time = time.time()
 num_epoch = 100
 
 for epoch in range(0, num_epoch):
-    train(model, device, train_loader, optimizer, epoch+1)
-    test(model, device, test_loader)
+    train(model, device, train_loader, optimizer, epoch+1, scattering)
+    test(model, device, test_loader, scattering)
     
     # Save the model every 20 epochs
     if (epoch + 1) % 20 == 0:
