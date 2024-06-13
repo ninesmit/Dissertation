@@ -10,7 +10,7 @@ torch.cuda.empty_cache()
 
 class ResNet18(nn.Module):
     '''
-        ResNet with CIFAR10
+        ResNet with scattering transform as input
     '''
     def __init__(self, num_classes=10):
         super(ResNet18, self).__init__()
