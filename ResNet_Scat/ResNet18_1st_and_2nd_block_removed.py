@@ -102,21 +102,22 @@ def count_trainable_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 mode = 2
+image_size = 128
 
 if mode == 1:
-    scattering = Scattering2D(J=2, shape=(128, 128), max_order=1)
+    scattering = Scattering2D(J=2, shape=(image_size, image_size), max_order=1)
     K = 17*3
 elif mode == 2:
-    scattering = Scattering2D(J=2, shape=(128, 128))
+    scattering = Scattering2D(J=2, shape=(image_size, image_size))
     K = 81*3
 else:
-    scattering = Scattering2D(J=2, shape=(128, 128))
+    scattering = Scattering2D(J=2, shape=(image_size, image_size))
     K = 81*3
 
-scattering = scattering.to(device)
-
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda" if use_cuda else "cpu")
+device = torch.device("cuda" if use_cuda else "CPU")
+
+scattering = scattering.to(device)
 model = Scattering2dResNet(K).to(device)
 
 total_params = count_trainable_parameters(model)
@@ -131,10 +132,10 @@ normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
 
 train_loader = torch.utils.data.DataLoader(
     datasets.CIFAR10(root=scattering_datasets.get_dataset_dir('CIFAR'), train=True, transform=transforms.Compose([
-        transforms.Resize((128, 128)),
+        transforms.Resize((image_size, image_size)),
         transforms.RandomHorizontalFlip(),
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
-        transforms.RandomCrop(128, padding=4),
+        transforms.RandomCrop(image_size, padding=4),
         transforms.RandomRotation(10),
         transforms.RandomPerspective(distortion_scale=0.2, p=0.2),
         transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
@@ -145,7 +146,7 @@ train_loader = torch.utils.data.DataLoader(
 
 test_loader = torch.utils.data.DataLoader(
     datasets.CIFAR10(root=scattering_datasets.get_dataset_dir('CIFAR'), train=False, transform=transforms.Compose([
-        transforms.Resize((128, 128)),
+        transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),
         normalize,
     ])),
@@ -162,7 +163,7 @@ for epoch in range(0, num_epoch):
     train(model, device, train_loader, optimizer, epoch+1, scattering)
     test(model, device, test_loader, scattering)
     
-    # Save the model every 10 epochs
+    # Save the model every 20 epochs
     if (epoch + 1) % 20 == 0:
         torch.save(model.state_dict(), f'Resnet_1st_and_2nd_blocks_removed_epoch_{epoch+1}.pth')
         print(f'Model saved at epoch {epoch+1}')
