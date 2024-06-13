@@ -1,7 +1,9 @@
+import time
+import datetime
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim
+import torch.optim as optim
 from torchvision import datasets, transforms, models
 from kymatio.torch import Scattering2D
 import kymatio.datasets as scattering_datasets
@@ -111,7 +113,7 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "CPU")
 
 scattering = scattering.to(device)
-model = Scattering2dResNet(K).to(device)
+model = Scattering2dVGG(K).to(device)
 
 total_params = count_trainable_parameters(model)
 print(f"Total trainable parameters: {total_params}")
