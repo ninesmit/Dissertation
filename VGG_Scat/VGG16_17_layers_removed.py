@@ -12,7 +12,7 @@ torch.cuda.empty_cache()
 
 class Scattering2dVGG(nn.Module):
     '''
-        ResNet with scattering transform as input
+        VGG with scattering transform as input
     '''
     def __init__(self, scattering_output_channels, num_classes=10):
         super(Scattering2dVGG, self).__init__()
