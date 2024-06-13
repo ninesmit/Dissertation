@@ -10,7 +10,7 @@ torch.cuda.empty_cache()
 
 class VGG16(nn.Module):
     '''
-        VGG16 with CIFAR10
+        VGG with scattering transform as input
     '''
     def __init__(self, num_classes=10):
         super(VGG16, self).__init__()
