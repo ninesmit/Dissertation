@@ -88,6 +88,7 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 model = ResNet18().to(device)
+image_size = 128
 
 total_params = count_trainable_parameters(model)
 print(f"Total trainable parameters: {total_params}")
@@ -101,12 +102,12 @@ normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
 
 train_loader = torch.utils.data.DataLoader(
     datasets.CIFAR10(root='.', train=True, transform=transforms.Compose([
-        transforms.Resize((128, 128)),
+        transforms.Resize((image_size, image_size)),
         transforms.RandomHorizontalFlip(),
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
-        transforms.RandomCrop(128, padding=4),
+        transforms.RandomCrop(image_size, padding=4),
         transforms.RandomRotation(10),
-        transforms.RandomPerspective(distortion_scale=0.2, p=0.2),
+        transforms.RandomPerspective(distort, ion_scale=0.2, p=0.2),
         transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
         transforms.ToTensor(),
         normalize,
@@ -115,7 +116,7 @@ train_loader = torch.utils.data.DataLoader(
 
 test_loader = torch.utils.data.DataLoader(
     datasets.CIFAR10(root='.', train=False, transform=transforms.Compose([
-        transforms.Resize((128, 128)),
+        transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),
         normalize,
     ])),
