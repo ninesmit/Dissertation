@@ -8,6 +8,8 @@ from torchvision import datasets, transforms, models
 from kymatio.torch import Scattering2D
 import kymatio.datasets as scattering_datasets
 
+torch.cuda.empty_cache()
+
 class Scattering2dVGG(nn.Module):
     '''
         ResNet with scattering transform as input
