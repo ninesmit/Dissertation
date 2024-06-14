@@ -159,7 +159,7 @@ for epoch in range(0, num_epoch):
     
     # Save the model every 10 epochs
     if (epoch + 1) % 20 == 0:
-        torch.save(model.state_dict(), f'EffB7_1st_and_2nd_blocks_removed_epoch_{epoch+1}.pth')
+        torch.save(model.state_dict(), f'EffB7_epoch_{epoch+1}.pth')
         print(f'Model saved at epoch {epoch+1}')
 
 total_end_time = time.time()
