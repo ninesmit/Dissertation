@@ -109,7 +109,7 @@ train_loader = torch.utils.data.DataLoader(
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
         transforms.RandomCrop(image_size, padding=4),
         transforms.RandomRotation(10),
-        transforms.RandomPerspective(distort, ion_scale=0.2, p=0.2),
+        transforms.RandomPerspective(distortion_scale=0.2, p=0.2),
         transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
         transforms.ToTensor(),
         normalize,
