@@ -44,6 +44,9 @@ class Scattering2dVIT(nn.Module):
         return self.vit(x)
 
 def train(model, device, train_loader, optimizer, epoch, scattering):
+    train_loss_log = np.zeros((1,16))
+    train_time = np.zeros((1,1))
+    
     train_start_time = time.time()
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -55,16 +58,23 @@ def train(model, device, train_loader, optimizer, epoch, scattering):
         loss.backward()
         optimizer.step()
         if batch_idx % 50 == 0:
+            train_loss_log[0][batch_idx/50] = loss.item()
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
             
     train_end_time = time.time()
     train_duration = datetime.timedelta(seconds=train_end_time - train_start_time)
+
+    train_time[0][0] = str(train_duration)
     
     print(f"Training time for epoch:{epoch} is {str(train_duration)}")
 
 def test(model, device, test_loader, scattering):
+    test_loss_log = np.zeros((1,1))
+    test_accuracy = np.zeros((1,1))
+    test_time = np.zeros((1,1))
+    
     test_start_time = time.time()
     model.eval()
     test_loss = 0
@@ -81,6 +91,10 @@ def test(model, device, test_loader, scattering):
     
     test_end_time = time.time()
     test_duration = datetime.timedelta(seconds=test_end_time - test_start_time)
+
+    test_loss_log[0][0] = test_loss
+    test_accuracy[0][0] = 100. * correct / len(test_loader.dataset)
+    test_time[0][0] = str(test_duration)
     
     print(f"Testing time for epoch:{epoch+1} is {str(test_duration)}")
     
@@ -150,6 +164,10 @@ num_epoch = 100
 for epoch in range(0, num_epoch):
     train(model, device, train_loader, optimizer, epoch+1, scattering)
     test(model, device, test_loader, scattering)
+
+    # write the log of training to the file
+    with open('vit_b_32_scat.txt', 'W') as file:
+        
     
     # Save the model every 20 epochs
     if (epoch + 1) % 10 == 0:
