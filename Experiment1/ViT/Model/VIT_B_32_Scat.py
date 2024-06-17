@@ -1,5 +1,6 @@
 import time
 import datetime
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,7 +32,7 @@ class Scattering2dVIT(nn.Module):
         for param in self.vit.parameters():
             param.requires_grad = False
             
-        for param in self.vit.encoder.layers[-1:].parameters():
+        for param in self.vit.encoder.layers[-2:].parameters():
             param.requires_grad = True
             
         for param in self.vit.heads.parameters():
@@ -45,8 +46,6 @@ class Scattering2dVIT(nn.Module):
 
 def train(model, device, train_loader, optimizer, epoch, scattering):
     train_loss_log = np.zeros((1,16))
-    train_time = np.zeros((1,1))
-    
     train_start_time = time.time()
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -58,22 +57,19 @@ def train(model, device, train_loader, optimizer, epoch, scattering):
         loss.backward()
         optimizer.step()
         if batch_idx % 50 == 0:
-            train_loss_log[0][batch_idx/50] = loss.item()
+            train_loss_log[0][int(batch_idx/50)] = loss.item()
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
             
     train_end_time = time.time()
     train_duration = datetime.timedelta(seconds=train_end_time - train_start_time)
-
-    train_time[0][0] = str(train_duration)
+    train_time = str(train_duration)
+    print(f"Training time for epoch:{epoch} is {train_time}")
     
-    print(f"Training time for epoch:{epoch} is {str(train_duration)}")
+    return train_loss_log, train_time
 
 def test(model, device, test_loader, scattering):
-    test_loss_log = np.zeros((1,1))
-    test_accuracy = np.zeros((1,1))
-    test_time = np.zeros((1,1))
     
     test_start_time = time.time()
     model.eval()
@@ -92,15 +88,20 @@ def test(model, device, test_loader, scattering):
     test_end_time = time.time()
     test_duration = datetime.timedelta(seconds=test_end_time - test_start_time)
 
-    test_loss_log[0][0] = test_loss
-    test_accuracy[0][0] = 100. * correct / len(test_loader.dataset)
-    test_time[0][0] = str(test_duration)
+    test_loss_log = test_loss
+    test_accuracy = 100. * correct / len(test_loader.dataset)
+    test_time = str(test_duration)
     
-    print(f"Testing time for epoch:{epoch+1} is {str(test_duration)}")
+    print(f"Testing time for epoch:{epoch+1} is {test_time}")
     
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
+    
+    return test_loss_log, test_time, test_accuracy
+
+def count_trainable_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 mode = 2
 image_size = 896
@@ -115,11 +116,18 @@ else:
     scattering = Scattering2D(J=2, shape=(image_size, image_size))
     K = 81*3
 
+text_file_name = 'vit_b_32_scat.txt'
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 scattering = scattering.to(device)
 model = Scattering2dVIT(K).to(device)
+
+total_params = count_trainable_parameters(model)
+print(f"Total trainable parameters: {total_params}")
+
+with open(text_file_name, 'a') as file:
+    file.write(f"""Number of parameter:{total_params}""")
 
 # Wrap the model with DataParallel
 if use_cuda and torch.cuda.device_count() > 1:
@@ -162,13 +170,13 @@ total_start_time = time.time()
 num_epoch = 100
 
 for epoch in range(0, num_epoch):
-    train(model, device, train_loader, optimizer, epoch+1, scattering)
-    test(model, device, test_loader, scattering)
-
-    # write the log of training to the file
-    with open('vit_b_32_scat.txt', 'W') as file:
-        
+    train_loss_log, train_time = train(model, device, train_loader, optimizer, epoch+1, scattering)
+    test_loss_log, test_time, test_accuracy = test(model, device, test_loader, scattering)
     
+    # write the log of training to the file
+    with open(text_file_name, 'a') as file:
+        file.write(f"""\nEpoch: {epoch+1}\nTraining loss: {[train_loss_log[0][i] for i in range(15)]}\nTraining time: {train_time}\nAverage test loss:{test_loss_log}\nTest time: {test_time}\nAccuracy: {test_accuracy}\n""")
+
     # Save the model every 20 epochs
     if (epoch + 1) % 10 == 0:
         torch.save(model.state_dict(), f'ViT_Scat_epoch_{epoch+1}.pth')
@@ -176,5 +184,8 @@ for epoch in range(0, num_epoch):
 
 total_end_time = time.time()
 total_elapsed_time = datetime.timedelta(seconds=total_end_time - total_start_time)
+
+with open(text_file_name, 'a') as file:
+    file.write(f"""Total Training time:{str(total_elapsed_time)}""")
 
 print(f"\nTotal training time for {num_epoch} epochs: {str(total_elapsed_time)}")
