@@ -118,6 +118,10 @@ model = Scattering2dEffNet(K).to(device)
 total_params = count_trainable_parameters(model)
 print(f"Total trainable parameters: {total_params}")
 
+# Wrap the model with DataParallel
+if use_cuda and torch.cuda.device_count() > 1:
+    model = nn.DataParallel(model)
+
 # DataLoaders
 num_workers = 4
 pin_memory = True if use_cuda else False
