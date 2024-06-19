@@ -10,7 +10,7 @@ class Scattering2dDenseNet(nn.Module):
     '''
         DenseNet with scattering transform as input
     '''
-    def __init__(self, scattering_output_channels):
+    def __init__(self, scattering_output_channels, num_classes = 10):
         super(Scattering2dDenseNet, self).__init__()
         self.scattering_output_channels = scattering_output_channels
         self.num_classes = num_classes
