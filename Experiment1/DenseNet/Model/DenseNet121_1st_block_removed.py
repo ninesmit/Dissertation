@@ -1,11 +1,12 @@
+import time
+import datetime
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim
+import torch.optim as optim
 from torchvision import datasets, transforms, models
 from kymatio.torch import Scattering2D
 import kymatio.datasets as scattering_datasets
-
 class Scattering2dDenseNet(nn.Module):
     '''
         DenseNet with scattering transform as input
