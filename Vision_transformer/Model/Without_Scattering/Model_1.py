@@ -260,7 +260,7 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 scattering = scattering.to(device)
-model = Scattering2dVIT(image_size=128, patch_size=16, num_classes=10, dim=512, depth=6, heads=8, mlp_dim=512, dropout=0.05, emb_dropout=0.05).to(device)
+model = Scattering2dVIT(image_size=128, patch_size=16, num_classes=10, dim=512, depth=10, heads=10, mlp_dim=512, dropout=0.05, emb_dropout=0.05).to(device)
 model.apply(initialize_weights)
 
 total_params = count_trainable_parameters(model)
@@ -307,7 +307,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
 total_start_time = time.time()
 
-num_epoch = 100
+num_epoch = 200
 
 for epoch in range(0, num_epoch):
     train_loss_log, train_time = train(model, device, train_loader, optimizer, epoch+1)
