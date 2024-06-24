@@ -2820,3 +2820,4 @@ Testing time for epoch:200 is 0:00:03.102003
 Test set: Average loss: 0.7687, Accuracy: 8394/10000 (83.94%)
 
 Model saved at epoch 200
+Total training time for 200 epochs: 2:41:27.512617
