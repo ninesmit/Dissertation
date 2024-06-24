@@ -24,7 +24,7 @@ from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 
 def pair(t):
-    return t if isinstance(t, tuple) else (t, t)
+        return t if isinstance(t, tuple) else (t, t)
 
 class PreNorm(nn.Module):
     def __init__(self, dim, fn):
@@ -113,17 +113,11 @@ class Scattering2dVIT(nn.Module):
 
     def build(self):
         
-        image_height, image_width = pair(self.image_size)
-        patch_height, patch_width = pair(self.patch_size)
-        
-        assert image_height % patch_height == 0 and image_width % patch_width == 0, 'Image dimensions must be divisible by the patch size.'
-
-        num_patches = (image_height // patch_height) * (image_width // patch_width)
-        patch_dim = self.channels * patch_height * patch_width
-        assert self.pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
+        num_patches = 243
+        patch_dim = 256
 
         self.to_patch_embedding = nn.Sequential(
-            Rearrange('b c (h p1) (w p2) -> b (h w) (p1 p2 c)', p1 = patch_height, p2 = patch_width),
+            Rearrange('b x h w -> b x (h w)'),
             nn.Linear(patch_dim, self.dim),
         )
 
@@ -139,37 +133,38 @@ class Scattering2dVIT(nn.Module):
             nn.LayerNorm(self.dim),
             nn.Linear(self.dim, self.num_classes)
         )
-                    
+
     def forward(self, img):
+        batch_size, channels, depth, height, width = img.size()
+        img = img.view(batch_size, channels * depth, height, width)
+        
         x = self.to_patch_embedding(img)
         b, n, _ = x.shape
-
+        
         cls_tokens = repeat(self.cls_token, '() n d -> b n d', b = b)
         x = torch.cat((cls_tokens, x), dim=1)
         x += self.pos_embedding[:, :(n + 1)]
         x = self.dropout2(x)
-
         x = self.transformer(x)
-
         x = x.mean(dim = 1) if self.pool == 'mean' else x[:, 0]
-
         x = self.to_latent(x)
+        
         return self.mlp_head(x)
-
+        
 def initialize_weights(m):
-  if isinstance(m, nn.Linear):
-      init.xavier_uniform_(m.weight)
-      if m.bias is not None:
-          init.zeros_(m.bias)
-  elif isinstance(m, nn.Conv2d):
-      init.kaiming_uniform_(m.weight, nonlinearity='relu')
-      if m.bias is not None:
-          init.zeros_(m.bias)
-  elif isinstance(m, nn.LayerNorm):
-      init.ones_(m.weight)
-      init.zeros_(m.bias)
-  elif isinstance(m, nn.Embedding):
-      init.xavier_uniform_(m.weight)
+    if isinstance(m, nn.Linear):
+        init.xavier_uniform_(m.weight)
+        if m.bias is not None:
+            init.zeros_(m.bias)
+    elif isinstance(m, nn.Conv2d):
+        init.kaiming_uniform_(m.weight, nonlinearity='relu')
+        if m.bias is not None:
+            init.zeros_(m.bias)
+    elif isinstance(m, nn.LayerNorm):
+        init.ones_(m.weight)
+        init.zeros_(m.bias)
+    elif isinstance(m, nn.Embedding):
+        init.xavier_uniform_(m.weight)
 
 def get_some_weights(model, num_weights=10):
     weights = []
@@ -186,8 +181,9 @@ def train(model, device, train_loader, optimizer, epoch):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
+        scattering_output = scattering(data)
         optimizer.zero_grad()
-        output = model(data)
+        output = model(scattering_output)
         loss = F.cross_entropy(output, target)
         loss.backward()
         optimizer.step()
@@ -217,7 +213,7 @@ def test(model, device, test_loader):
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            output = model(data)
+            output = model(scattering(data))
             test_loss += F.cross_entropy(output, target, reduction='sum').item() # sum up batch loss
             pred = output.max(1, keepdim=True)[1] # get the index of the max log-probability
             correct += pred.eq(target.view_as(pred)).sum().item()
@@ -243,7 +239,7 @@ def count_trainable_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 mode = 2
-image_size = 128
+image_size = 64
 
 if mode == 1:
     scattering = Scattering2D(J=2, shape=(image_size, image_size), max_order=1)
@@ -260,7 +256,7 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 scattering = scattering.to(device)
-model = Scattering2dVIT(image_size=128, patch_size=16, num_classes=10, dim=512, depth=6, heads=8, mlp_dim=512, dropout=0.05, emb_dropout=0.05).to(device)
+model = Scattering2dVIT(image_size=128, patch_size=8, num_classes=10, dim=1024, depth=10, heads=10, mlp_dim=512, dropout=0.05, emb_dropout=0.05).to(device)
 model.apply(initialize_weights)
 
 total_params = count_trainable_parameters(model)
