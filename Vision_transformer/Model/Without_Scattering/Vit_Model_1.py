@@ -80,15 +80,18 @@ class Transformer(nn.Module):
     def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout = 0.):
         super().__init__()
         self.layers = nn.ModuleList([])
+        
+        ## Add all encoder layers into self.layers
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
                 PreNorm(dim, Attention(dim, heads = heads, dim_head = dim_head, dropout = dropout)),
                 PreNorm(dim, FeedForward(dim, mlp_dim, dropout = dropout))
             ]))
+    
     def forward(self, x):
         for attn, ff in self.layers:
-            x = attn(x) + x
-            x = ff(x) + x
+            x = attn(x) + x    ## The first two blocks in each encoder layer(Norm + Multi-head Attention)
+            x = ff(x) + x      ## The last two blocks in each encoder layer(Norm + MLP)
         return x
 
 class Scattering2dVIT(nn.Module):
@@ -112,7 +115,7 @@ class Scattering2dVIT(nn.Module):
         self.build()
 
     def build(self):
-        
+
         image_height, image_width = pair(self.image_size)
         patch_height, patch_width = pair(self.patch_size)
         
@@ -141,16 +144,22 @@ class Scattering2dVIT(nn.Module):
         )
                     
     def forward(self, img):
+
+        ## Step1: Dividing images into patches
+        ## Step2: Linear Projection and flattening
         x = self.to_patch_embedding(img)
         b, n, _ = x.shape
 
+        ## Step3: Positional Embedding
         cls_tokens = repeat(self.cls_token, '() n d -> b n d', b = b)
         x = torch.cat((cls_tokens, x), dim=1)
         x += self.pos_embedding[:, :(n + 1)]
         x = self.dropout2(x)
 
+        ## Step4: Transformer Encoders
         x = self.transformer(x)
 
+        ## Step5: MLP Heads and making a prediction.
         x = x.mean(dim = 1) if self.pool == 'mean' else x[:, 0]
 
         x = self.to_latent(x)
