@@ -255,7 +255,7 @@ def test(model, device, test_loader):
 mode = 2
 image_size = 128
 patch_size = 4
-text_file_name = 'Vit_Img_Model11.txt'
+text_file_name = 'Vit_Img_Model3.txt'
 num_classes = 10
 dim = 1024
 depth = 6
@@ -367,7 +367,7 @@ for epoch in range(0, num_epoch):
 
     # Save the model every 20 epochs
     if (epoch + 1) % 10 == 0:
-        torch.save(model.state_dict(), f'Vit_Img_Model11_epoch_{epoch+1}.pth')
+        torch.save(model.state_dict(), f'Vit_Img_Model3_epoch_{epoch+1}.pth')
         print(f'Model saved at epoch {epoch+1}')
 
 total_end_time = time.time()
