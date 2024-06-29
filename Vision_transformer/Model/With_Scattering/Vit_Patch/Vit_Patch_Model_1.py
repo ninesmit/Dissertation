@@ -132,7 +132,7 @@ class Scattering2dVIT(nn.Module):
     '''
         ViT with scattering transform as input
     '''
-    def __init__(self, scattering, scat_channels, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, pool, channels, dim_head, dropout, emb_dropout):
+    def __init__(self, scattering, scat_channels, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, pool, channels, dim_head, dropout, emb_dropout, order):
         super(Scattering2dVIT, self).__init__()
         self.image_size = image_size
         self.patch_size = patch_size
@@ -148,6 +148,7 @@ class Scattering2dVIT(nn.Module):
         self.dropout = dropout
         self.emb_dropout = emb_dropout
         self.scattering = scattering
+        self.order = order
         self.build()
 
     def build(self):
@@ -156,7 +157,7 @@ class Scattering2dVIT(nn.Module):
         patch_height, patch_width = pair(self.patch_size)
         
         num_patches = (image_height // patch_height) * (image_width // patch_width)
-        patch_dim = self.scat_channels * int(patch_height/4) * int(patch_width/4)
+        patch_dim = self.scat_channels * int(patch_height/(2 ** self.order)) * int(patch_width/(2 ** self.order))
 
         self.prepare_for_scattering = nn.Sequential(
             Rearrange('b c (h p1) (w p2) -> (b h w) c p1 p2', p1 = patch_height, p2 = patch_width)
@@ -265,7 +266,7 @@ def test(model, device, test_loader):
 mode = 2
 image_size = 128
 patch_size = 16
-text_file_name = 'Vit_Scat_Model1.txt'
+text_file_name = 'Vit_Patch_Model1.txt'
 num_classes = 10
 dim = 1024
 depth = 6
@@ -285,7 +286,7 @@ image_size_scat = 16
 ## Training Loop
 
 if mode == 1:
-    scattering = Scattering2D(J=2, shape=(image_size, image_size), max_order=1)
+    scattering = Scattering2D(J=2, shape=(image_size_scat, image_size_scat), max_order=1)
     K = 17*3
 elif mode == 2:
     scattering = Scattering2D(J=2, shape=(image_size_scat, image_size_scat))
@@ -310,7 +311,8 @@ model = Scattering2dVIT(scattering = scattering,
                         channels=channels,
                         dim_head=dim_head,
                         dropout=dropout, 
-                        emb_dropout=emb_dropout).to(device)
+                        emb_dropout=emb_dropout,
+                        order=mode).to(device)
 model.apply(initialize_weights)
 
 total_params = count_trainable_parameters(model)
@@ -380,7 +382,7 @@ for epoch in range(0, num_epoch):
 
     # Save the model every 20 epochs
     if (epoch + 1) % 10 == 0:
-        torch.save(model.state_dict(), f'Vit_Scat_Model1_epoch_{epoch+1}.pth')
+        torch.save(model.state_dict(), f'Vit_Patch_Model1_epoch_{epoch+1}.pth')
         print(f'Model saved at epoch {epoch+1}')
 
 total_end_time = time.time()
