@@ -317,24 +317,34 @@ def count_trainable_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 image_size = 128
-num_epoch = 100
-batch_size = 128
-num_workers = 4
 text_file_name = 'Swin_Model1.txt'
+hidden_dim = 96
+layers = (2,2,6,2)
+heads = (3,6,12,24)
+channels = 3
+num_classes = 10
+head_dim = 32
+window_size = 4
+downscaling_factor = (4,2,2,2)
+relative_pos_embedding = True
+num_workers = 4
+batch_size = 128
+learning_rate = 0.0001
+num_epoch = 100
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 # scattering = scattering.to(device)
-model = SwinTransformer(hidden_dim = 96,
-                        layers=(2,2,6,2),
-                        heads=(3,6,12,24),
-                        channels=3,
-                        num_classes=10,
-                        head_dim=32,
-                        window_size=4,
-                        downscaling_factors=(4,2,2,2),
-                        relative_pos_embedding=True).to(device)
+model = SwinTransformer(hidden_dim = hidden_dim,
+                        layers=layers,
+                        heads=heads,
+                        channels=channels,
+                        num_classes=num_classes,
+                        head_dim=head_dim,
+                        window_size=window_size,
+                        downscaling_factors=downscaling_factor,
+                        relative_pos_embedding=relative_pos_embedding).to(device)
 model.apply(initialize_weights)
 
 total_params = count_trainable_parameters(model)
