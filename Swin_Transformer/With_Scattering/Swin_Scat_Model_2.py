@@ -326,7 +326,7 @@ def count_trainable_parameters(model):
 # All Parameters
 mode = 2
 image_size = 256
-text_file_name = 'Swin_Model2.txt'
+text_file_name = 'Swin_Scat_Model2.txt'
 hidden_dim = 96
 layers = (2,2,6,2)
 heads = (3,6,12,24)
@@ -435,7 +435,7 @@ for epoch in range(0, num_epoch):
 
     # Save the model every 20 epochs
     if (epoch + 1) % 10 == 0:
-        torch.save(model.state_dict(), f'Swin_Model2_epoch_{epoch+1}.pth')
+        torch.save(model.state_dict(), f'Swin_Scat_Model2_epoch_{epoch+1}.pth')
         print(f'Model saved at epoch {epoch+1}')
 
 total_end_time = time.time()
