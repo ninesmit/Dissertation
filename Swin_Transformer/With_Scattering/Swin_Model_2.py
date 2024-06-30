@@ -235,12 +235,15 @@ class SwinTransformer(nn.Module):
         self.stage1 = StageModule(in_channels=channels, hidden_dimension=hidden_dim, layers=layers[0],
                                   downscaling_factor=downscaling_factors[0], num_heads=heads[0], head_dim=head_dim,
                                   window_size=window_size, relative_pos_embedding=relative_pos_embedding)
+        
         self.stage2 = StageModule(in_channels=hidden_dim, hidden_dimension=hidden_dim * 2, layers=layers[1],
                                   downscaling_factor=downscaling_factors[1], num_heads=heads[1], head_dim=head_dim,
                                   window_size=window_size, relative_pos_embedding=relative_pos_embedding)
+        
         self.stage3 = StageModule(in_channels=hidden_dim * 2, hidden_dimension=hidden_dim * 4, layers=layers[2],
                                   downscaling_factor=downscaling_factors[2], num_heads=heads[2], head_dim=head_dim,
                                   window_size=window_size, relative_pos_embedding=relative_pos_embedding)
+        
         self.stage4 = StageModule(in_channels=hidden_dim * 4, hidden_dimension=hidden_dim * 8, layers=layers[3],
                                   downscaling_factor=downscaling_factors[3], num_heads=heads[3], head_dim=head_dim,
                                   window_size=window_size, relative_pos_embedding=relative_pos_embedding)
@@ -255,17 +258,11 @@ class SwinTransformer(nn.Module):
         batch_size, channels, depth, height, width = img.size()
         img = img.view(batch_size, channels * depth, height, width)
         
-#         print("This is image size 1", img.shape)
         x = self.stage1(img)
-#         print("This is image size 2", x.shape)
         x = self.stage2(x)
-#         print("This is image size 3", x.shape)
         x = self.stage3(x)
-#         print("This is image size 4", x.shape)
         x = self.stage4(x)
-#         print("This is image size 5", x.shape)
         x = x.mean(dim=[2, 3])
-#         print("This is image size 6", x.shape)
         return self.mlp_head(x)
     
 def train(model, device, train_loader, optimizer, epoch, scattering):
@@ -289,10 +286,6 @@ def train(model, device, train_loader, optimizer, epoch, scattering):
     train_duration = datetime.timedelta(seconds=train_end_time - train_start_time)
     train_time = str(train_duration)
     print(f"Training time for epoch:{epoch} is {train_time}")
-    
-    # Get and log some weights
-#     some_weights = get_some_weights(model)
-#     print(f"Epoch {epoch} weights: {some_weights}")
     
     return train_loss_log, train_time
 
@@ -330,8 +323,23 @@ def test(model, device, test_loader, scattering):
 def count_trainable_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+# All Parameters
 mode = 2
 image_size = 256
+text_file_name = 'Swin_Model2.txt'
+hidden_dim = 96
+layers = (2,2,6,2)
+heads = (3,6,12,24)
+channels = 243
+num_classes = 10
+head_dim = 32
+window_size = 2
+downscaling_factor = (4,2,2,2)
+relative_pos_embedding = True
+num_workers = 4
+batch_size = 128
+learning_rate = 0.0001
+num_epoch = 100
 
 if mode == 1:
     scattering = Scattering2D(J=2, shape=(image_size, image_size), max_order=1)
@@ -343,20 +351,19 @@ else:
     scattering = Scattering2D(J=2, shape=(image_size, image_size))
     K = 81*3
 
-text_file_name = 'Swin_Model2.txt'
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 scattering = scattering.to(device)
-model = SwinTransformer(hidden_dim = 96,
-                        layers=(2,2,6,2),
-                        heads=(3,6,12,24),
-                        channels=243,
-                        num_classes=10,
-                        head_dim=32,
-                        window_size=2,
-                        downscaling_factors=(4,2,2,2),
-                        relative_pos_embedding=True).to(device)
+model = SwinTransformer(hidden_dim = hidden_dim,
+                        layers=layers,
+                        heads=heads,
+                        channels=channels,
+                        num_classes=num_classes,
+                        head_dim=head_dim,
+                        window_size=window_size,
+                        downscaling_factors=downscaling_factor,
+                        relative_pos_embedding=relative_pos_embedding).to(device)
 
 model.apply(initialize_weights)
 
@@ -371,7 +378,6 @@ if use_cuda and torch.cuda.device_count() > 1:
     model = nn.DataParallel(model)
 
 # DataLoaders
-num_workers = 4
 pin_memory = True if use_cuda else False
 
 normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -389,7 +395,7 @@ datasets.CIFAR10(root='.', train=True, transform=transforms.Compose([
     transforms.ToTensor(),
     normalize,
 ]), download=True),
-batch_size=128, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
+batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
 
 test_loader = torch.utils.data.DataLoader(
     datasets.CIFAR10(root='.', train=False, transform=transforms.Compose([
@@ -397,9 +403,7 @@ test_loader = torch.utils.data.DataLoader(
         transforms.ToTensor(),
         normalize,
     ])),
-    batch_size=128, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
-
-learning_rate = 0.0001
+    batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
 
 # Optimizer
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -415,11 +419,12 @@ scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
 
 total_start_time = time.time()
 
-num_epoch = 100
+acc_log = np.zeros((1,num_epoch))
 
 for epoch in range(0, num_epoch):
     train_loss_log, train_time = train(model, device, train_loader, optimizer, epoch+1, scattering)
     test_loss_log, test_time, test_accuracy = test(model, device, test_loader, scattering)
+    acc_log[0][epoch] = test_accuracy
     
     # Step the learning rate scheduler
     scheduler.step()
@@ -439,4 +444,5 @@ total_elapsed_time = datetime.timedelta(seconds=total_end_time - total_start_tim
 with open(text_file_name, 'a') as file:
     file.write(f"""Total Training time:{str(total_elapsed_time)}""")
 
+print(f"Highest Accuracy is {acc_log.max()} at epoch {np.argmax(acc_log) + 1}")
 print(f"\nTotal training time for {num_epoch} epochs: {str(total_elapsed_time)}")
