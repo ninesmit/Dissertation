@@ -277,7 +277,7 @@ set_seed(42)
 mode = 3
 image_size = 128
 patch_size = 32
-text_file_name = 'Real_Vit_Patch_Model11.txt'
+text_file_name = 'Real_Vit_Patch_Model12.txt'
 num_classes = 10
 dim = 1024
 depth = 5
@@ -396,7 +396,7 @@ for epoch in range(0, num_epoch):
 
     # Save the model every 20 epochs
     if (epoch + 1) % 100 == 0:
-        torch.save(model.state_dict(), f'Real_Vit_Patch_Model11_epoch_{epoch+1}.pth')
+        torch.save(model.state_dict(), f'Real_Vit_Patch_Model12_epoch_{epoch+1}.pth')
         print(f'Model saved at epoch {epoch+1}')
 
 total_end_time = time.time()
