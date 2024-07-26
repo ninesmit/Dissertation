@@ -264,7 +264,7 @@ def test(model, device, test_loader):
 
 set_seed(42)
 mode = 1
-image_size = 128
+image_size = 64
 patch_size = 4
 text_file_name = 'Real_Vit_Img_Model11.txt'
 num_classes = 10
