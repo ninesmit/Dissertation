@@ -15,7 +15,6 @@ import datetime
 import argparse
 import sys
 import math
-import random
 
 from kymatio.torch import Scattering2D
 from torchvision import datasets
@@ -25,15 +24,6 @@ from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 
 ## Additional Function
-
-def set_seed(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    np.random.seed(seed)
-    random.seed(seed)
-    cudnn.benchmark = False
-    cudnn.deterministic = True
 
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
@@ -142,12 +132,11 @@ class Scattering2dVIT(nn.Module):
     '''
         ViT with scattering transform as input
     '''
-    def __init__(self, scattering, scat_channels, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, pool, channels, dim_head, dropout, emb_dropout, order):
+    def __init__(self, image_size, num_patches, num_classes, dim, depth, heads, mlp_dim, pool, channels, dim_head, dropout, emb_dropout):
         super(Scattering2dVIT, self).__init__()
         self.image_size = image_size
-        self.patch_size = patch_size
+        self.num_patches = num_patches
         self.num_classes = num_classes
-        self.scat_channels = scat_channels
         self.dim = dim
         self.depth = depth
         self.heads = heads
@@ -157,24 +146,15 @@ class Scattering2dVIT(nn.Module):
         self.dim_head = dim_head
         self.dropout = dropout
         self.emb_dropout = emb_dropout
-        self.scattering = scattering
-        self.order = order
         self.build()
 
     def build(self):
         
-        image_height, image_width = pair(self.image_size)
-        patch_height, patch_width = pair(self.patch_size)
-        
-        num_patches = (image_height // patch_height) * (image_width // patch_width)
-        patch_dim = self.scat_channels * int(patch_height/(2 ** self.order)) * int(patch_width/(2 ** self.order))
+        num_patches = self.num_patches
+        patch_dim = int((image_size/2) ** 2)
 
-        self.prepare_for_scattering = nn.Sequential(
-            Rearrange('b c (h p1) (w p2) -> (b h w) c p1 p2', p1 = patch_height, p2 = patch_width)
-        )
-        
         self.to_patch_embedding = nn.Sequential(
-            Rearrange('(b n) c h w -> b n (c h w)', n = num_patches),
+            Rearrange('b x h w -> b x (h w)'),
             nn.Linear(patch_dim, self.dim),
         )
 
@@ -189,15 +169,10 @@ class Scattering2dVIT(nn.Module):
         )
 
     def forward(self, img):
+        batch_size, channels, depth, height, width = img.size()
+        img = img.view(batch_size, channels * depth, height, width)
         
-        x = self.prepare_for_scattering(img)
-        self.scattering = self.scattering.to(device)
-        x = self.scattering(x)
-        
-        batch_size, channels, depth, height, width = x.size()
-        x = x.view(batch_size, channels * depth, height, width)
-        
-        x = self.to_patch_embedding(x)
+        x = self.to_patch_embedding(img)
         b, n, _ = x.shape
         
         cls_tokens = repeat(self.cls_token, '() n d -> b n d', b = b)
@@ -218,8 +193,9 @@ def train(model, device, train_loader, optimizer, epoch):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
+        scattering_output = scattering(data)
         optimizer.zero_grad()
-        output = model(data)
+        output = model(scattering_output)
         loss = F.cross_entropy(output, target)
         loss.backward()
         optimizer.step()
@@ -249,9 +225,9 @@ def test(model, device, test_loader):
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            output = model(data)
-            test_loss += F.cross_entropy(output, target, reduction='sum').item()
-            pred = output.max(1, keepdim=True)[1]
+            output = model(scattering(data))
+            test_loss += F.cross_entropy(output, target, reduction='sum').item() # sum up batch loss
+            pred = output.max(1, keepdim=True)[1] # get the index of the max log-probability
             correct += pred.eq(target.view_as(pred)).sum().item()
     
     test_loss /= len(test_loader.dataset)
@@ -273,37 +249,34 @@ def test(model, device, test_loader):
 
 ## All hyperparamters
 
-set_seed(42)
 mode = 1
 image_size = 128
-patch_size = 32
-text_file_name = 'Real_Vit_Patch_Model11.txt'
+text_file_name = 'Real_Vit_Freq_Model11.txt'
 num_classes = 10
 dim = 1024
 depth = 5
 heads = 5
-mlp_dim = 512
+mlp_dim = 1024
 pool='cls'
-channels=3
+channels=1
 dim_head=64
-dropout = 0.15
-emb_dropout = 0.15
+dropout = 0.05
+emb_dropout = 0.05
 num_workers = 4
 batch_size = 128
 learning_rate = 0.0001
 num_epoch = 100
-image_size_scat = 32
 
 ## Training Loop
 
 if mode == 1:
-    scattering = Scattering2D(J=1, shape=(image_size_scat, image_size_scat))
+    scattering = Scattering2D(J=1, shape=(image_size, image_size))
     K = 9*3
 elif mode == 2:
-    scattering = Scattering2D(J=2, shape=(image_size_scat, image_size_scat))
+    scattering = Scattering2D(J=2, shape=(image_size, image_size))
     K = 81*3
 elif mode == 3:
-    scattering = Scattering2D(J=3, shape=(image_size_scat, image_size_scat))
+    scattering = Scattering2D(J=3, shape=(image_size, image_size))
     K = 217*3
 else:
     print("Specify the number of scale for scattering transformation")
@@ -311,11 +284,9 @@ else:
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
-# scattering = scattering.to(device)
-model = Scattering2dVIT(scattering = scattering,
-                        scat_channels = K,
-                        image_size=image_size, 
-                        patch_size=patch_size, 
+scattering = scattering.to(device)
+model = Scattering2dVIT(image_size=image_size, 
+                        num_patches=K, 
                         num_classes=num_classes, 
                         dim=dim, 
                         depth=depth, 
@@ -325,8 +296,7 @@ model = Scattering2dVIT(scattering = scattering,
                         channels=channels,
                         dim_head=dim_head,
                         dropout=dropout, 
-                        emb_dropout=emb_dropout,
-                        order=mode).to(device)
+                        emb_dropout=emb_dropout).to(device)
 model.apply(initialize_weights)
 
 total_params = count_trainable_parameters(model)
@@ -335,8 +305,8 @@ print(f"Total trainable parameters: {total_params}")
 with open(text_file_name, 'a') as file:
     file.write(f"""Number of parameter:{total_params}""")
 
-# if use_cuda and torch.cuda.device_count() > 1:
-#     model = nn.DataParallel(model)
+if use_cuda and torch.cuda.device_count() > 1:
+    model = nn.DataParallel(model)
 
 # DataLoaders
 pin_memory = True if use_cuda else False
@@ -369,26 +339,11 @@ test_loader = torch.utils.data.DataLoader(
 # Optimizer
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-# Learning rate scheduler
-def lr_lambda(epoch):
-    if epoch < 70:
-        return 1
-    else:
-        return 0.5
-
-scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-
 total_start_time = time.time()
-
-acc_log = np.zeros((1,num_epoch))
 
 for epoch in range(0, num_epoch):
     train_loss_log, train_time = train(model, device, train_loader, optimizer, epoch+1)
     test_loss_log, test_time, test_accuracy = test(model, device, test_loader)
-    acc_log[0][epoch] = test_accuracy
-
-    # Step the learning rate scheduler
-    scheduler.step()
     
     # write the log of training to the file
     with open(text_file_name, 'a') as file:
@@ -396,7 +351,7 @@ for epoch in range(0, num_epoch):
 
     # Save the model every 20 epochs
     if (epoch + 1) % 100 == 0:
-        torch.save(model.state_dict(), f'Real_Vit_Patch_Model11_epoch_{epoch+1}.pth')
+        torch.save(model.state_dict(), f'Vit_Scat_Model11_epoch_{epoch+1}.pth')
         print(f'Model saved at epoch {epoch+1}')
 
 total_end_time = time.time()
@@ -404,7 +359,5 @@ total_elapsed_time = datetime.timedelta(seconds=total_end_time - total_start_tim
 
 with open(text_file_name, 'a') as file:
     file.write(f"""Total Training time:{str(total_elapsed_time)}""")
-    
-print(f"Highest Accuracy is {acc_log.max()} at epoch {np.argmax(acc_log) + 1}")
 
 print(f"\nTotal training time for {num_epoch} epochs: {str(total_elapsed_time)}")
